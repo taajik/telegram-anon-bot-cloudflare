@@ -1,6 +1,6 @@
 # Telegram Bot on Cloudflare Workers
 
-A minimal example of a Telegram Bot running on a Cloudflare Worker.
+A minimal Telegram anonymous bot running on a Cloudflare Worker.
 
 ## Setup:
 
@@ -20,51 +20,3 @@ A minimal example of a Telegram Bot running on a Cloudflare Worker.
 14. That's it, now you can send a text message to your Telegram bot
 
 ## Bot behaviour
-
-The bot will send the original message back with `Echo:` prepended.
-If you want to change it, look at the function `onMessage()`. It receives a [Message](https://core.telegram.org/bots/api#message) object and sends a text back:
-
-```javascript
-/**
- * Handle incoming Message
- * https://core.telegram.org/bots/api#message
- */
-function onMessage (message) {
-  return sendPlainText(message.chat.id, 'Echo:\n' + message.text)
-}
-```
-
-## bot2.js
-
-The file [bot2.js](bot2.js) contains an improved bot, that demonstrates how to react to commands,
-send and receive [inline buttons](https://core.telegram.org/bots/api#inlinekeyboardbutton),
-and create [MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style)-formatted text.
-
-## bot3.js
-
-The file [bot3.js](bot3.js) contains an improved version that replies inline queries with voice messages.
-The voice messages should be stored in OPUS format and .ogg in the cloud you most like.
-The audio files are listed in a JSON array with the following structure in a KV namespace called `NAMESPACE` and with following content under the key `input_files`.
-
-Go to *Workers & Pages* -> *KV* and create a new namespace. Add a new key `input_files` and store the JSON structure from below with your own audio files.
-
-Now in *Overview* -> your-worker -> *Settings* -> *Variables* -> *KV Namespace Bindings* bind the namespace to a variable called `NAMESPACE`.
-
-```javascript
- [
-    [
-      "File Name",
-      "URL",
-      duration,
-      "<tg-spoiler> caption </tg-spoiler>"
-    ],
-    [
-      "test",
-      "https://example.com/my_file.ogg",
-      5,
-      "<tg-spoiler>Description in a spoiler</tg-spoiler>"
-    ],
-  ]
-```
-## bot4.js
-The bot4 is a bot that randomly reacts to messages received. It demostrates how to use big reactions when the 🎉 emoji gets chosen.

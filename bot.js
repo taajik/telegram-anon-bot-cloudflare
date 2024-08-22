@@ -6,7 +6,7 @@ const TOKEN = ENV_BOT_TOKEN; // Get it from @BotFather https://core.telegram.org
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET; // A-Z, a-z, 0-9, _ and -
 const OWNER = 1234;  // replace with your number id (get from @creationdatebot)
-var reciever = 0;
+var msg = {};
 
 
 /**
@@ -62,28 +62,40 @@ async function onUpdate (update) {
  * Handle incoming Message
  * https://core.telegram.org/bots/api#message
  */
-function onMessage (message) {
+async function onMessage (message) {
     if (message.chat.id != OWNER) {
         return sendInlineButtonRow(OWNER, message.chat.id + ' said:\n\n' + message.text, [{
             text: 'Reply',
-            callback_data: message.chat.id
+            callback_data: JSON.stringify({
+                reciever: message.chat.id,
+                reply_to: message.message_id
+            })
         }])
-    } else if (reciever != 0) {
-        return sendPlainText(reciever, message.text);
-    } else {
-        return sendPlainText(message.chat.id, "Message was NOT sent.");
+    } else if ("reciever" in msg && "reply_to" in msg) {
+        await sendPlainText(msg.reciever, message.text, msg.reply_to);
+        msg = {};
+        return sendPlainText(message.chat.id, "Sent.", message.message_id);
     }
+    return sendPlainText(message.chat.id, "Message was NOT sent.", message.message_id);
 }
 
 /**
  * Send plain text message
  * https://core.telegram.org/bots/api#sendmessage
  */
-async function sendPlainText (chatId, text) {
-    return (await fetch(apiUrl('sendMessage', {
+async function sendPlainText (chatId, text, replyTo = null) {
+    const params = {
         chat_id: chatId,
         text
-    }))).json()
+    }
+    if (replyTo) {
+        params.reply_parameters = JSON.stringify({
+            message_id: replyTo,
+            chat_id: chatId,
+            allow_sending_without_reply: false
+        })
+    }
+    return (await fetch(apiUrl('sendMessage', params))).json()
 }
 
 /**
@@ -114,8 +126,9 @@ async function sendInlineButtons (chatId, text, buttons) {
  * https://core.telegram.org/bots/api#message
  */
 async function onCallbackQuery (callbackQuery) {
-    reciever = callbackQuery.data;
-    return answerCallbackQuery(callbackQuery.id, 'You are now talking to ' + callbackQuery.message.chat.id)
+    msg = JSON.parse(callbackQuery.data);
+    await sendPlainText(OWNER, 'Write your answer:', callbackQuery.message.message_id);
+    return answerCallbackQuery(callbackQuery.id)
 }
 
 /**
@@ -124,13 +137,13 @@ async function onCallbackQuery (callbackQuery) {
  * https://core.telegram.org/bots/api#answercallbackquery
  */
 async function answerCallbackQuery (callbackQueryId, text = null) {
-    const data = {
+    const params = {
         callback_query_id: callbackQueryId
     }
     if (text) {
-        data.text = text
+        params.text = text
     }
-    return (await fetch(apiUrl('answerCallbackQuery', data))).json()
+    return (await fetch(apiUrl('answerCallbackQuery', params))).json()
 }
 
 
