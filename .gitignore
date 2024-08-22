@@ -1,0 +1,8 @@
+# Project
+todo.txt
+
+# Visual Studio
+.vscode/
+.history/
+*.code-workspace
+
