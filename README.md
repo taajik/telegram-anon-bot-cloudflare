@@ -11,9 +11,9 @@ A minimal Telegram anonymous bot running on a Cloudflare Worker.
 5. In you worker's config page, click on "Settings" tab and then "Variables".
 6. Add a new environment variable with the name `ENV_BOT_TOKEN` and the value of your bot token that [@BotFather](https://t.me/botfather) gave you. (you can encrypt these variables)
 7. Add another environment variable with the name `ENV_BOT_SECRET` and set the value to a random secret. See https://core.telegram.org/bots/api#setwebhook
-8. Click on "Edit Code" to change the source code of your new worker.
-9. Copy and paste the code from [bot.js](bot.js) into the editor.
-10. Change the `OWNER` variable to the value of your User ID. You can get it from [@userinfobot](https://t.me/userinfobot)
+8. Add yet another environment variable with the name `ENV_OWNER_ID` and set the value to your User ID. You can get it from [@userinfobot](https://t.me/userinfobot)
+9. Click on "Edit Code" to change the source code of your new worker.
+10. Copy and paste the code from [bot.js](bot.js) into the editor.
 11. Optional: Change the `WEBHOOK` variable to a different path. See https://core.telegram.org/bots/api#setwebhook
 12. Click on "Save and Deploy".
 13. In the HTTP panel append `/registerWebhook` to the url. For example: https://my-worker-123.username.workers.dev/registerWebhook
