@@ -3,7 +3,7 @@ const TOKEN = ENV_BOT_TOKEN;  // Get it from @BotFather https://core.telegram.or
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET;  // A-Z, a-z, 0-9, _ and -
 const OWNER = ENV_OWNER_ID;  // Get it from @userinfobot
-var msg = {};
+var target_anon;
 
 
 // Wait for requests to the worker.
@@ -54,58 +54,51 @@ async function onUpdate (update) {
 // Handle incoming Message.
 // https://core.telegram.org/bots/api#message
 async function onMessage (message) {
+    var reply_msg = {reciever: null, reply_to: null}
+    if (message.reply_to_message) {
+        reply_msg = JSON.parse(message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data);
+    }
+
     if (message.chat.id == OWNER) {
-        if ('reciever' in msg && 'reply_to' in msg) {
-            await sendMessage(msg.reciever, OWNER, message.message_id, msg.reply_to);
-            msg = {};
-            return sendPlainText(OWNER, 'Sent.', message.message_id);
+        if (reply_msg.reciever) {
+            target_anon = reply_msg.reciever;
+            return sendMessage(reply_msg.reciever, OWNER, message.message_id, reply_msg.reply_to);
+        } else if (target_anon) {
+            return sendMessage(target_anon, OWNER, message.message_id);
         } else {
-            return sendPlainText(OWNER, 'Message was NOT sent.', message.message_id);
+            return sendPlainText(OWNER, 'Not sent! Please reply to a message.', message.message_id);
         }
     } else {
-        return sendInlineButtonMessage(OWNER, message.chat.id, message.message_id);
+        return sendMessage(OWNER, message.chat.id, message.message_id, reply_msg.reply_to);
     }
 }
 
 // Copy a message and send it.
 // https://core.telegram.org/bots/api#copymessage
 async function sendMessage (chatId, fromChatId, msgId, replyMsgId = null) {
-    const params = {
-        chat_id: chatId,
-        from_chat_id: fromChatId,
-        message_id: msgId,
+    var text = 'seen';
+    if (chatId == OWNER) {
+        text = 'from: ' + fromChatId;
     }
-    addReplyParams(params, chatId, replyMsgId);
-    return (await fetch(apiUrl('copyMessage', params))).json()
-}
-
-// Copy a message and send it with buttons.
-// https://core.telegram.org/bots/api#copymessage
-async function sendInlineButtonMessage (chatId, fromChatId, msgId) {
     const params = {
         chat_id: chatId,
         from_chat_id: fromChatId,
         message_id: msgId,
         reply_markup: JSON.stringify({
-            inline_keyboard: [
-                [{
-                    text: 'from: ' + fromChatId,
-                    callback_data: '0',
-                }],
-                [{
-                    text: 'Reply',
-                    callback_data: JSON.stringify({
-                        reciever: fromChatId,
-                        reply_to: msgId,
-                    })
-                }],
-            ]
+            inline_keyboard: [[{
+                text: text,
+                callback_data: JSON.stringify({
+                    reciever: fromChatId,
+                    reply_to: msgId,
+                }),
+            }]]
         })
     }
+    addReplyParams(params, chatId, replyMsgId);
     return (await fetch(apiUrl('copyMessage', params))).json()
 }
 
-// Send plain text message.
+// Send plain text.
 // https://core.telegram.org/bots/api#sendmessage
 async function sendPlainText (chatId, text, replyMsgId = null) {
     const params = {
@@ -116,14 +109,13 @@ async function sendPlainText (chatId, text, replyMsgId = null) {
     return (await fetch(apiUrl('sendMessage', params))).json()
 }
 
-// Reply to a message.
+// Add parameters to reply to a message.
 // https://core.telegram.org/bots/api#replyparameters
 function addReplyParams (params, chatId, replyMsgId) {
     if (replyMsgId) {
         params.reply_parameters = JSON.stringify({
             message_id: replyMsgId,
             chat_id: chatId,
-            allow_sending_without_reply: false
         })
     }
 }
@@ -134,10 +126,8 @@ function addReplyParams (params, chatId, replyMsgId) {
 // Handle incoming callback_query (inline button press)
 // https://core.telegram.org/bots/api#message
 async function onCallbackQuery (callbackQuery) {
-    if (callbackQuery.data != '0') {
-        msg = JSON.parse(callbackQuery.data);
-        await sendPlainText(OWNER, 'Write your answer:', callbackQuery.message.message_id);
-    }
+    var msg = JSON.parse(callbackQuery.data);
+    await sendPlainText(msg.reciever, 'This message was seen!', msg.reply_to);
     return answerCallbackQuery(callbackQuery.id)
 }
 

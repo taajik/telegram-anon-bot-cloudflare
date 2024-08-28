@@ -13,9 +13,9 @@ A minimal Telegram anonymous bot running on a Cloudflare Worker.
 7. Add another environment variable with the name `ENV_BOT_SECRET` and set the value to a random secret. See https://core.telegram.org/bots/api#setwebhook
 8. Add yet another environment variable with the name `ENV_OWNER_ID` and set the value to your User ID. You can get it from [@userinfobot](https://t.me/userinfobot)
 9. Click on "Edit Code" to change the source code of your new worker.
-10. Copy and paste the code from [bot.js](bot.js) into the editor.
+10. Replace the code in editor with the code from [bot.js](bot.js).
 11. Optional: Change the `WEBHOOK` variable to a different path. See https://core.telegram.org/bots/api#setwebhook
-12. Click on "Save and Deploy".
+12. Click on "Deploy" and then "Save and deploy".
 13. In the HTTP panel append `/registerWebhook` to the url. For example: https://my-worker-123.username.workers.dev/registerWebhook
 14. Click "Send". In the Preview panel should appear `Ok`. If 401 Unauthorized appears, there might be a problem with the environment variables.
 15. That's it, now you can share the username of your Telegram bot with people.
