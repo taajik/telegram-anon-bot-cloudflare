@@ -54,19 +54,22 @@ async function onUpdate (update) {
 // Handle incoming Message.
 // https://core.telegram.org/bots/api#message
 async function onMessage (message) {
-    var reply_msg = {reciever: null, reply_to: null}
-    if (message.reply_to_message) {
+    var reply_msg;
+    // await sendPlainText(OWNER, JSON.stringify(message.reply_to_message));
+    try {
         reply_msg = JSON.parse(message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data);
+    } catch(err) {
+        reply_msg = {reciever: null, reply_to: null};
     }
 
     if (message.chat.id == OWNER) {
         if (reply_msg.reciever) {
             target_anon = reply_msg.reciever;
-            return sendMessage(reply_msg.reciever, OWNER, message.message_id, reply_msg.reply_to);
+            return sendMessage(reply_msg.reciever, message.chat.id, message.message_id, reply_msg.reply_to);
         } else if (target_anon) {
-            return sendMessage(target_anon, OWNER, message.message_id);
+            return sendMessage(target_anon, message.chat.id, message.message_id);
         } else {
-            return sendPlainText(OWNER, 'Not sent! Please reply to a message.', message.message_id);
+            return sendPlainText(OWNER, 'Not sent! Please reply to the message you want to answer.', message.message_id);
         }
     } else {
         return sendMessage(OWNER, message.chat.id, message.message_id, reply_msg.reply_to);
@@ -76,24 +79,12 @@ async function onMessage (message) {
 // Copy a message and send it.
 // https://core.telegram.org/bots/api#copymessage
 async function sendMessage (chatId, fromChatId, msgId, replyMsgId = null) {
-    var text = 'seen';
-    if (chatId == OWNER) {
-        text = 'from: ' + fromChatId;
-    }
     const params = {
         chat_id: chatId,
         from_chat_id: fromChatId,
         message_id: msgId,
-        reply_markup: JSON.stringify({
-            inline_keyboard: [[{
-                text: text,
-                callback_data: JSON.stringify({
-                    reciever: fromChatId,
-                    reply_to: msgId,
-                }),
-            }]]
-        })
     }
+    addInlineKeyboard(params, chatId, fromChatId, msgId);
     addReplyParams(params, chatId, replyMsgId);
     return (await fetch(apiUrl('copyMessage', params))).json()
 }
@@ -120,6 +111,25 @@ function addReplyParams (params, chatId, replyMsgId) {
     }
 }
 
+// Add (or edit) the inline keyboard to a message.
+// https://core.telegram.org/bots/api#inlinekeyboardmarkup
+function addInlineKeyboard (params, chatId, fromChatId, msgId, reacted = false) {
+    var text = 'Like';
+    if (chatId == OWNER) {
+        text = fromChatId + ' (Like)';
+    }
+    params.reply_markup = JSON.stringify({
+        inline_keyboard: [[{
+            text: text,
+            callback_data: JSON.stringify({
+                reciever: fromChatId,
+                reply_to: msgId,
+                reacted: reacted,
+            }),
+        }]]
+    })
+}
+
 
 
 
@@ -127,7 +137,24 @@ function addReplyParams (params, chatId, replyMsgId) {
 // https://core.telegram.org/bots/api#message
 async function onCallbackQuery (callbackQuery) {
     var msg = JSON.parse(callbackQuery.data);
-    await sendPlainText(msg.reciever, 'This message was seen!', msg.reply_to);
+    const params = {
+        chat_id: msg.reciever,
+        message_id: msg.reply_to,
+    }
+    if (!msg.reacted) {
+        params.reaction = JSON.stringify([{
+            type: 'emoji',
+            emoji: '👍',
+        }])
+    }
+    await (await fetch(apiUrl('setMessageReaction', params))).json()
+    params.chat_id = callbackQuery.message.chat.id;
+    params.message_id = callbackQuery.message.message_id;
+    await (await fetch(apiUrl('setMessageReaction', params))).json()
+
+    delete params.reaction;
+    addInlineKeyboard(params, params.chat_id, msg.reciever, msg.reply_to, !msg.reacted);
+    await (await fetch(apiUrl('editMessageReplyMarkup', params))).json()
     return answerCallbackQuery(callbackQuery.id)
 }
 
