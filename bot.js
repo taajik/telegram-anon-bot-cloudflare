@@ -116,7 +116,7 @@ function addReplyParams (params, chatId, replyMsgId) {
 function addInlineKeyboard (params, chatId, fromChatId, msgId, reacted = false) {
     var text = 'Like';
     if (chatId == OWNER) {
-        text = fromChatId + ' (Like)';
+        text = hash(fromChatId) + ' (Like)';
     }
     params.reply_markup = JSON.stringify({
         inline_keyboard: [[{
@@ -128,6 +128,19 @@ function addInlineKeyboard (params, chatId, fromChatId, msgId, reacted = false) 
             }),
         }]]
     })
+}
+
+// Generate hash for the id of anon users.
+function hash (message) {
+    message = message + 'z2p!bmR*cQ6QAY1[dn8g';
+    var hash = 0,
+      i, chr;
+    for (i = 0; i < message.length; i++) {
+        chr = message.charCodeAt(i);
+        hash = ((hash << 5) - hash) + chr;
+        hash |= 0;
+    }
+    return hash;
 }
 
 
