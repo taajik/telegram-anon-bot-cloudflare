@@ -2,7 +2,6 @@
 const TOKEN = ENV_BOT_TOKEN;  // Get it from @BotFather https://core.telegram.org/bots#6-botfather
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET;  // A-Z, a-z, 0-9, _ and -
-const OWNER = ENV_OWNER_ID;  // Get it from @userinfobot
 
 
 // Wait for requests to the worker.
@@ -53,47 +52,50 @@ async function onUpdate (update) {
 // Handle incoming Message.
 // https://core.telegram.org/bots/api#message
 async function onMessage (message) {
+    var user_id = hash(message.chat.id);
+    var target = await CHATS.get(user_id);
+
     if (message.text) {
-        if (message.text.startsWith('/start') || message.text.startsWith('/help')) {
-            var HELPTXT = "You are in an anonymous chat with the owner of this bot. " +
-                "Anything you send here will be forwarded to them.\n" +
+        if (message.text == '/start' || message.text == '/help') {
+            var HELPTXT = "Hi! With this bot you can chat with someone anonymously. (both parties are anonymous)\n" +
+                "After you start a chat, anything you send here will be send to them.\n" +
+                "Starting a chat is done either by clicking on someone's link or " +
+                "by replying to a message. (naturally, the chat that you might've already been in, will end.)\n" +
+                // "Every time you reply to someone new, you switch the chat and can continue to talk to them." +
                 "You can send all kinds of messages. " +
-                "The only drawback is that you can't reply to your own messages.\nHave fun!"
-            if (message.chat.id == OWNER) {
-                HELPTXT = "Commands:\n" +
-                    "/help: Returns this message.\n" +
-                    "/end: Closes the ongoing chat with an anon user.\n"
-            }
+                "The only drawback is that you can't reply to your own messages.\n" +
+                "FYI, clicking the button on messages will react to them with 'thumbs up'.\nHave fun!\n" +
+                "\nCommands:\n" +
+                "/help: Return this message.\n" +
+                "/end: End the ongoing chat with someone.\n"
             return sendPlainText(message.chat.id, HELPTXT, message.message_id)
         } else if (message.text.startsWith('/end')) {
-            await CHAT.delete('target');
-            return sendPlainText(message.chat.id, 'Chat ended!', message.message_id)
+            if (target) {
+                await CHATS.delete(user_id);
+                return sendPlainText(message.chat.id, 'Chat ended!', message.message_id)
+            } else {
+                return sendPlainText(message.chat.id, 'You are not in any chats.', message.message_id)
+            }
         }
     }
 
+    // await sendPlainText(message.chat.id, JSON.stringify(message.reply_to_message));
     var reply_msg;
-    // await sendPlainText(OWNER, JSON.stringify(message.reply_to_message));
     try {
         reply_msg = JSON.parse(message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data);
     } catch(err) {
-        reply_msg = {reciever: null, reply_to: null};
+        reply_msg = {receiver: null, reply_to: null};
     }
 
-    if (message.chat.id == OWNER) {
-        var target_anon = await CHAT.get('target');
-        // await sendPlainText(OWNER, hash(target_anon));
-        if (reply_msg.reciever) {
-            if (target_anon != reply_msg.reciever) {
-                await CHAT.put('target', reply_msg.reciever);
-            }
-            return sendMessage(reply_msg.reciever, message.chat.id, message.message_id, reply_msg.reply_to);
-        } else if (target_anon) {
-            return sendMessage(target_anon, message.chat.id, message.message_id);
-        } else {
-            return sendPlainText(OWNER, 'Not sent! Please reply to the message you want to answer.', message.message_id);
+    if (reply_msg.receiver) {
+        if (target != reply_msg.receiver) {
+            await CHATS.put(user_id, reply_msg.receiver);
         }
+        return sendMessage(reply_msg.receiver, message.chat.id, message.message_id, reply_msg.reply_to);
+    } else if (target) {
+        return sendMessage(target, message.chat.id, message.message_id);
     } else {
-        return sendMessage(OWNER, message.chat.id, message.message_id, reply_msg.reply_to);
+        return sendPlainText(message.chat.id, 'Not sent! Please start a chat.', message.message_id);
     }
 }
 
@@ -105,7 +107,7 @@ async function sendMessage (chatId, fromChatId, msgId, replyMsgId = null) {
         from_chat_id: fromChatId,
         message_id: msgId,
     }
-    addInlineKeyboard(params, chatId, fromChatId, msgId);
+    addInlineKeyboard(params, fromChatId, msgId);
     addReplyParams(params, chatId, replyMsgId);
     return (await fetch(apiUrl('copyMessage', params))).json()
 }
@@ -134,16 +136,13 @@ function addReplyParams (params, chatId, replyMsgId) {
 
 // Add (or edit) the inline keyboard to a message.
 // https://core.telegram.org/bots/api#inlinekeyboardmarkup
-function addInlineKeyboard (params, chatId, fromChatId, msgId, reacted = false) {
-    var text = 'Like';
-    if (chatId == OWNER) {
-        text = hash(fromChatId) + ' (Like)';
-    }
+function addInlineKeyboard (params, fromChatId, msgId, reacted = false) {
+    var text = 'from: ' + hash(fromChatId);
     params.reply_markup = JSON.stringify({
         inline_keyboard: [[{
             text: text,
             callback_data: JSON.stringify({
-                reciever: fromChatId,
+                receiver: fromChatId,
                 reply_to: msgId,
                 reacted: reacted,
             }),
@@ -153,13 +152,13 @@ function addInlineKeyboard (params, chatId, fromChatId, msgId, reacted = false) 
 
 // Generate hash for the id of anon users.
 function hash (message) {
-    message = 'z2p!bmR*cQ6QAY1[dn8g' + message;
+    message = 'f_59?Col>b]YfWBYATd^' + message;
     var hash = 0,
       i, chr;
     for (i = 0; i < message.length; i++) {
         chr = message.charCodeAt(i);
         hash = ((hash << 5) - hash) + chr;
-        hash |= 0;
+        hash >>>= 0;
     }
     return hash;
 }
@@ -172,7 +171,7 @@ function hash (message) {
 async function onCallbackQuery (callbackQuery) {
     var msg = JSON.parse(callbackQuery.data);
     const params = {
-        chat_id: msg.reciever,
+        chat_id: msg.receiver,
         message_id: msg.reply_to,
     }
     if (!msg.reacted) {
@@ -187,7 +186,7 @@ async function onCallbackQuery (callbackQuery) {
     await (await fetch(apiUrl('setMessageReaction', params))).json()
 
     delete params.reaction;
-    addInlineKeyboard(params, params.chat_id, msg.reciever, msg.reply_to, !msg.reacted);
+    addInlineKeyboard(params, msg.receiver, msg.reply_to, !msg.reacted);
     await (await fetch(apiUrl('editMessageReplyMarkup', params))).json()
     return answerCallbackQuery(callbackQuery.id)
 }
