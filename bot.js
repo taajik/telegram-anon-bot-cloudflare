@@ -3,7 +3,6 @@ const TOKEN = ENV_BOT_TOKEN;  // Get it from @BotFather https://core.telegram.or
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET;  // A-Z, a-z, 0-9, _ and -
 const OWNER = ENV_OWNER_ID;  // Get it from @userinfobot
-var target_anon;
 
 
 // Wait for requests to the worker.
@@ -54,6 +53,24 @@ async function onUpdate (update) {
 // Handle incoming Message.
 // https://core.telegram.org/bots/api#message
 async function onMessage (message) {
+    if (message.text) {
+        if (message.text.startsWith('/start') || message.text.startsWith('/help')) {
+            var HELPTXT = "You are in an anonymous chat with the owner of this bot. " +
+                "Anything you send here will be forwarded to them.\n" +
+                "You can send all kinds of messages. " +
+                "The only drawback is that you can't reply to your own messages.\nHave fun!"
+            if (message.chat.id == OWNER) {
+                HELPTXT = "Commands:\n" +
+                    "/help: Returns this message.\n" +
+                    "/end: Closes the ongoing chat with an anon user.\n"
+            }
+            return sendPlainText(message.chat.id, HELPTXT, message.message_id)
+        } else if (message.text.startsWith('/end')) {
+            await CHAT.delete('target');
+            return sendPlainText(message.chat.id, 'Chat ended!', message.message_id)
+        }
+    }
+
     var reply_msg;
     // await sendPlainText(OWNER, JSON.stringify(message.reply_to_message));
     try {
@@ -63,8 +80,12 @@ async function onMessage (message) {
     }
 
     if (message.chat.id == OWNER) {
+        var target_anon = await CHAT.get('target');
+        // await sendPlainText(OWNER, hash(target_anon));
         if (reply_msg.reciever) {
-            target_anon = reply_msg.reciever;
+            if (target_anon != reply_msg.reciever) {
+                await CHAT.put('target', reply_msg.reciever);
+            }
             return sendMessage(reply_msg.reciever, message.chat.id, message.message_id, reply_msg.reply_to);
         } else if (target_anon) {
             return sendMessage(target_anon, message.chat.id, message.message_id);
@@ -132,7 +153,7 @@ function addInlineKeyboard (params, chatId, fromChatId, msgId, reacted = false) 
 
 // Generate hash for the id of anon users.
 function hash (message) {
-    message = message + 'z2p!bmR*cQ6QAY1[dn8g';
+    message = 'z2p!bmR*cQ6QAY1[dn8g' + message;
     var hash = 0,
       i, chr;
     for (i = 0; i < message.length; i++) {
