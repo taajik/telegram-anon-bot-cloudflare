@@ -2,6 +2,37 @@
 const TOKEN = ENV_BOT_TOKEN;  // Get it from @BotFather https://core.telegram.org/bots#6-botfather
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET;  // A-Z, a-z, 0-9, _ and -
+const HELPTXT_EN = "Hi! With this bot you can chat with someone anonymously. (Both parties are anonymous)\n" +
+    "Once you start a chat, anything you send here will be sent to them.\n" +
+    "To start a chat with someone, you can either click on their link or reply to a message they have sent. " +
+    "(Naturally, the chat that you might've already been in with simeone else, will end)\n" +
+    "So every time you reply to someone new, the chat will switch to them.\n" +
+    "You can send all kinds of messages. " +
+    "The only drawback is that you can't reply to your own messages.\n" +
+    "btw, clicking the button on a message will react to it with a 'thumbs up'.\nHave fun!\n" +
+    "\nCommands:\n" +
+    "/help - Return this message\n" +
+    "/currentchat - Return the ID of the user you are currently chatting with\n" +
+    "/mylink - Get your own anon link\n" +
+    "/customlink - Set your link to anything you want (just like a username)\n" +
+    "/end - End the ongoing chat with someone\n"
+const HELPTXT_FA = "سلام. با این بات میتونی ناشناس چت کنی. (هر دو طرف ناشناس اند)\n" +
+    "بعد از اینکه یه چت رو شروع کردی، هر چیزی اینجا بفرستی، واسه طرف مقابل ارسال میشه.\n" +
+    "واسه شروع کردن چت، یا میشه رو لینک یکی بزنی یا " +
+    "به پیام کسی ریپلای بزنی. (طبیعتا اگه از قبل با کس دیگه ای توی چت بوده باشی، اون چت بسته میشه)\n" +
+    "یعنی هر دفعه که به پیام فرد دیگه‌ای ریپلای میزنی، طرف مقابلت عوض میشه به اون.\n" +
+    "همه جور پیامی میشه فرستاد. " +
+    "ولی تنها مشکلش اینه که به پیام‌های خودت نمی‌تونی ریپلای بزنی.\n" +
+    "راستی، دکمه‌ی روی پیام‌ها رو اگه کلیک کنی، ریکشن لایک میزنه.\nخوش بگذره!\n" +
+    "\nدستورها:\n" +
+    "/help - همین پیام رو میفرسته\n" +
+    "/currentchat - آیدی کاربری که الان در حال چت باهاشی\n" +
+    "/mylink - لینک ناشناس خودت\n" +
+    "/customlink - انتخاب لینک ناشناس سفارشی (مثل یه یوزرنیم)\n" +
+    "/end - بستن چت فعلی\n"
+const HELPTXT = HELPTXT_EN + '\n\n' + HELPTXT_FA
+
+
 
 
 // Wait for requests to the worker.
@@ -56,7 +87,6 @@ async function onMessage (message) {
     var target = await CHATS.get(user_id);
 
     if (message.text) {
-        const HELPTXT = "in a minute...";
         if (message.text.startsWith('/start')) {
             if (message.text.split(' ').length == 1) {
                 return sendPlainText(message.chat.id, HELPTXT);
@@ -81,6 +111,12 @@ async function onMessage (message) {
             return sendPlainText(message.chat.id, "that's premium stuff 😂. kidding. it's just not ready yet", message.message_id);
         } else if (message.text == '/help') {
             return sendPlainText(message.chat.id, HELPTXT, message.message_id);
+        } else if (message.text == '/currentchat') {
+            if (target) {
+                return sendPlainText(message.chat.id, 'You are in a chat with user ' + hash(target), message.message_id);
+            } else {
+                return sendPlainText(message.chat.id, 'You are not in any chats.', message.message_id);
+            }
         } else if (message.text == '/end') {
             if (target) {
                 await CHATS.delete(user_id);
