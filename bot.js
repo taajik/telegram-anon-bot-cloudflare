@@ -56,25 +56,37 @@ async function onMessage (message) {
     var target = await CHATS.get(user_id);
 
     if (message.text) {
-        if (message.text == '/start' || message.text == '/help') {
-            var HELPTXT = "Hi! With this bot you can chat with someone anonymously. (both parties are anonymous)\n" +
-                "After you start a chat, anything you send here will be send to them.\n" +
-                "Starting a chat is done either by clicking on someone's link or " +
-                "by replying to a message. (naturally, the chat that you might've already been in, will end.)\n" +
-                // "Every time you reply to someone new, you switch the chat and can continue to talk to them." +
-                "You can send all kinds of messages. " +
-                "The only drawback is that you can't reply to your own messages.\n" +
-                "FYI, clicking the button on messages will react to them with 'thumbs up'.\nHave fun!\n" +
-                "\nCommands:\n" +
-                "/help: Return this message.\n" +
-                "/end: End the ongoing chat with someone.\n"
-            return sendPlainText(message.chat.id, HELPTXT, message.message_id)
-        } else if (message.text.startsWith('/end')) {
+        const HELPTXT = "in a minute...";
+        if (message.text.startsWith('/start')) {
+            if (message.text.split(' ').length == 1) {
+                return sendPlainText(message.chat.id, HELPTXT);
+            }
+            target = await LINKS.get(message.text.split(' ')[1]);
+            if (!target) {
+                await sendPlainText(message.chat.id, HELPTXT);
+                return sendPlainText(message.chat.id, "Sorry, that user wasn't found.", message.message_id);
+            }
+            if (target == message.chat.id) {
+                return sendPlainText(message.chat.id, "You tryna text yourself or just wanna check if it works? :)", message.message_id);
+            }
+            await CHATS.put(user_id, target);
+            return sendPlainText(message.chat.id, 'You are now in a chat with user ' + hash(target) + '.\nAnything you send will be send to them.\nUse /end to end the chat.');
+        } else if (message.text == '/mylink') {
+            if (!await LINKS.get(user_id)) {
+                await LINKS.put(user_id, message.chat.id);
+            }
+            await sendPlainText(message.chat.id, "Here you go:\nShare this with people so they can start an anonymous chat with you.");
+            return sendPlainText(message.chat.id, `https://t.me/mybasicanonbot?start=${user_id}`);
+        } else if (message.text == '/customlink') {
+            return sendPlainText(message.chat.id, "that's premium stuff 😂. kidding. it's just not ready yet", message.message_id);
+        } else if (message.text == '/help') {
+            return sendPlainText(message.chat.id, HELPTXT, message.message_id);
+        } else if (message.text == '/end') {
             if (target) {
                 await CHATS.delete(user_id);
-                return sendPlainText(message.chat.id, 'Chat ended!', message.message_id)
+                return sendPlainText(message.chat.id, 'Chat ended!', message.message_id);
             } else {
-                return sendPlainText(message.chat.id, 'You are not in any chats.', message.message_id)
+                return sendPlainText(message.chat.id, 'You are not in any chats.', message.message_id);
             }
         }
     }
@@ -95,7 +107,7 @@ async function onMessage (message) {
     } else if (target) {
         return sendMessage(target, message.chat.id, message.message_id);
     } else {
-        return sendPlainText(message.chat.id, 'Not sent! Please start a chat.', message.message_id);
+        return sendPlainText(message.chat.id, 'Not sent! Please start a chat. (/help)', message.message_id);
     }
 }
 
