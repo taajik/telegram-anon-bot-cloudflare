@@ -11,8 +11,8 @@ A Telegram anonymous bot running on a Cloudflare Worker.
 5. In you worker's config page, click on "Settings" tab and then "Variables".
 6. Add a new environment variable with the name `ENV_BOT_TOKEN` and the value of your bot token that [@BotFather](https://t.me/botfather) gave you. (you can encrypt these variables)
 7. Add another environment variable with the name `ENV_BOT_SECRET` and set the value to a random secret. See https://core.telegram.org/bots/api#setwebhook
-8. Create the KV database. see https://developers.cloudflare.com/kv/get-started/#create-a-kv-namespace-via-the-dashboard
-9. Add a binding variable with the name `CHATS` and bind it to the KV database you just created. see https://developers.cloudflare.com/kv/concepts/kv-namespaces/#bind-your-kv-namespace-via-the-dashboard
+8. Create three KV database. see https://developers.cloudflare.com/kv/get-started/#create-a-kv-namespace-via-the-dashboard
+9. Add three binding variable with the names `CHATS`, `LINKS` and `CUSTOM_LINKS` and bind them to the KV databases you just created. see https://developers.cloudflare.com/kv/concepts/kv-namespaces/#bind-your-kv-namespace-via-the-dashboard
 10. Click on "Edit Code" to change the source code of your new worker.
 11. Replace the code in editor with the code from [bot.js](bot.js).
 12. Optional: Change the `WEBHOOK` variable to a different path. See https://core.telegram.org/bots/api#setwebhook
