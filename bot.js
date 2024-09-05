@@ -12,7 +12,7 @@ const HELPTXT_EN = "Hi! With this bot you can chat with someone anonymously.\n" 
     "/help - Return this message\n" +
     "/end - End the ongoing chat\n" +
     "/mylink - Get your link\n" +
-    "/customlink - Choose a customized link (like a username)\n" +
+    "/customname - Set your name and link (like a username)\n" +
     "\nIf there were any issues you can contact me here: " + START_LINK + "admin"
 const HELPTXT_FA = "سلام! با این بات میتونی ناشناس چت کنی.\n" +
     "وقتی به پیام کسی ریپلای میزنی، بعدش میتونی باهاش چت رو ادامه بدی.\n" +
@@ -23,7 +23,7 @@ const HELPTXT_FA = "سلام! با این بات میتونی ناشناس چت 
     "/help - همین پیام رو میفرسته\n" +
     "/end - بستن چت جاری\n" +
     "/mylink - لینک ناشناس خودت\n" +
-    "/customlink - انتخاب لینک ناشناس سفارشی (مثل یوزرنیم)\n" +
+    "/customname - انتخاب اسم و لینک سفارشی (مثل یوزرنیم)\n" +
     "\n مشکلی هم اگه بود، می‌تونی اینجا پیام بدی: " + START_LINK + "admin"
 const HELPTXT = HELPTXT_EN + '\n\n\n' + HELPTXT_FA;
 var insistent_user = 0;
@@ -79,15 +79,25 @@ async function onUpdate (update) {
 // Handle incoming Message.
 // https://core.telegram.org/bots/api#message
 async function onMessage (message) {
+    // return sendPlainText(message.chat.id, JSON.stringify(message.reply_to_message));
+    if (message.pinned_message) {
+        return (await fetch(apiUrl('deleteMessage', {
+            chat_id: message.chat.id,
+            message_id: message.message_id,
+        }))).json()
+    }
     var user_id = hash(message.chat.id);
-    var target = await CHATS.get(user_id);
+    var current_chat = JSON.parse(await CHATS.get(user_id)) || [];
+    var target = current_chat[0];
+    var use_name = current_chat[1];
 
     if (message.text) {
         if (message.text.startsWith('/start')) {
             if (message.text.split(' ').length == 1) {
                 return sendPlainText(message.chat.id, HELPTXT);
             }
-            target = await LINKS.get(message.text.split(' ')[1].toLowerCase());
+            var cname = message.text.split(' ')[1].toLowerCase();
+            target = await LINKS.get(cname);
             if (!target) {
                 return sendPlainText(message.chat.id, "Sorry, that user wasn't found. (/help)", message.message_id);
             }
@@ -95,50 +105,53 @@ async function onMessage (message) {
                 insistent_user += message.chat.id;
                 if (insistent_user == message.chat.id*3) {
                     insistent_user = 0;
-                    return sendPlainText(message.chat.id, "Well, \"can't\" to first and \"it does\" to second (actually, I'm just hoping, tell me if it doesn't)", message.message_id);
+                    return sendPlainText(message.chat.id, "Well, \"can't\" to first and \"it does\" to second (tell me if it didn't though)", message.message_id);
                 }
                 return sendPlainText(message.chat.id, "You tryna text yourself or just wanna see if it works? :)", message.message_id);
             }
-            await CHATS.put(user_id, target);
-            var m = await sendPlainText(message.chat.id, "You are now in a chat with " + hash(target) + ".\nAnything you send will be sent to them.\nSend /end if you want to close the chat.");
+            if (target == current_chat[0] && !use_name) {
+                return sendPlainText(message.chat.id, "You don't need to click on the link again. You are alreay in a chat with '" + cname + "'.", message.message_id);
+            }
+            await CHATS.put(user_id, JSON.stringify([target, false]));
+            var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + cname + "'.\nMesseges you send here will be sent to them.\nUse /end if you want to close the chat.");
             return changePinnedMessage(message.chat.id, m.result.message_id);
 
         } else if (message.text == '/mylink') {
-            var link = await CUSTOM_LINKS.get(user_id);
-            if (!link) {
-                link = user_id;
+            var cname = await CUSTOM_NAMES.get(user_id);
+            if (!cname) {
+                cname = user_id;
                 if (!await LINKS.get(user_id)) {
-                    await LINKS.put(user_id, message.chat.id);    // create a link using the hashed id
+                    await LINKS.put(user_id, message.chat.id);    // generate a link using the hashed id
                 }
             }
-            await sendPlainText(message.chat.id, "Here you go:\nShare this with people so they can start an anonymous chat with you.", message.message_id);
-            return sendPlainText(message.chat.id,  START_LINK + link);
+            await sendPlainText(message.chat.id, "Here's your link:\nAnyone who clicks it, will see you as '" + cname + "'.", message.message_id);
+            return sendPlainText(message.chat.id,  START_LINK + cname);
 
-        } else if (message.text.startsWith('/customlink')) {
+        } else if (message.text.startsWith('/customname')) {
             if (message.text.split(' ').length == 1) {
-                return sendPlainText(message.chat.id, "Choose the value for your link in this format:\n/customlink VALUE\n\nIf you want to delete your custom link, send this:\n/customlink reset", message.message_id);
+                return sendPlainText(message.chat.id, "Choose the value for your name and link in this format:\n/customname VALUE\n\nIf you want to delete your custom name and link, send this:\n/customname reset", message.message_id);
             }
-            var link = message.text.split(' ')[1].toLowerCase();
-            if (link == 'reset') {
+            var cname = message.text.split(' ')[1].toLowerCase();
+            if (cname == 'reset') {
                 await LINKS.put(user_id, message.chat.id);    // link the hashed id
-                await LINKS.delete(await CUSTOM_LINKS.get(user_id));    // delete the custom link to the user's id
-                await CUSTOM_LINKS.delete(user_id);    // delete the custom link
-                return sendPlainText(message.chat.id, "Your link was reseted to this:\n" + START_LINK + user_id, message.message_id);
+                await LINKS.delete(await CUSTOM_NAMES.get(user_id));    // delete the custom link to the user's id
+                await CUSTOM_NAMES.delete(user_id);    // delete the custom name
+                return sendPlainText(message.chat.id, "Your name and link were reseted. Your link is now this:\n" + START_LINK + user_id, message.message_id);
             }
-            if (link == 'delete') {
+            if (cname == 'delete') {
                 await LINKS.delete(user_id);    // delete the hashed id link
-                await LINKS.delete(await CUSTOM_LINKS.get(user_id));    // delete the custom link to the user's id
-                await CUSTOM_LINKS.delete(user_id);    // delete the custom link
-                return sendPlainText(message.chat.id, "Your link was deleted.", message.message_id);
+                await LINKS.delete(await CUSTOM_NAMES.get(user_id));    // delete the custom link to the user's id
+                await CUSTOM_NAMES.delete(user_id);    // delete the custom name
+                return sendPlainText(message.chat.id, "Your link was deleted.\nSend /mylink to generate one again.", message.message_id);
             }
-            if (await LINKS.get(link) || !/^[a-z][\da-z_]{4,20}$/i.test(link) || link.includes('admin')) {
-                return sendPlainText(message.chat.id, "That's invalid or taken! Please choose something else.\n(5 char min, a-z, 0-9, _)", message.message_id);
+            if (await LINKS.get(cname) || !/^[a-z][\da-z_]{3,20}[\da-z]$/i.test(cname) || cname.includes('admin')) {
+                return sendPlainText(message.chat.id, "That's invalid or taken! Please choose something else.\n(5 char min. you can use a-z, 0-9, _)", message.message_id);
             }
-            await LINKS.put(link, message.chat.id);    // link the custom link to the user's id
+            await LINKS.put(cname, message.chat.id);    // link the custom link to the user's id
             await LINKS.delete(user_id);    // delete the hashed id link
-            await LINKS.delete(await CUSTOM_LINKS.get(user_id));    // delete the old custom link
-            await CUSTOM_LINKS.put(user_id, link);    // save the custom link
-            return sendPlainText(message.chat.id, "Done! Your new link is this:\n" + START_LINK + link, message.message_id);
+            await LINKS.delete(await CUSTOM_NAMES.get(user_id));    // delete the old custom link
+            await CUSTOM_NAMES.put(user_id, cname);    // save the custom name
+            return sendPlainText(message.chat.id, "Done! Your name is now '" + cname + "' and your new link is this:\n" + START_LINK + cname, message.message_id);
 
         } else if (message.text == '/end') {
             if (target) {
@@ -156,24 +169,23 @@ async function onMessage (message) {
         }
     }
 
-    // await sendPlainText(message.chat.id, JSON.stringify(message.reply_to_message));
     var reply_msg;
     try {
         reply_msg = JSON.parse(message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data);
     } catch(err) {
-        reply_msg = {receiver: null, reply_to: null};
+        reply_msg = {r: null, rt: null};
     }
 
-    if (reply_msg.receiver) {
-        if (target != reply_msg.receiver) {
-            target = reply_msg.receiver;
-            await CHATS.put(user_id, target);
-            var m = await sendPlainText(message.chat.id, "You are now in a chat with " + hash(target), message.message_id);
+    if (reply_msg.r) {
+        if (target != reply_msg.r || use_name == (reply_msg.f&1)) {    // reply to a new user or reply to same user with a different id
+            target = reply_msg.r;
+            await CHATS.put(user_id, JSON.stringify([target, !(reply_msg.f&1)]));
+            var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + await getUserName(target, reply_msg.f&1) + "'.", message.message_id);
             await changePinnedMessage(message.chat.id, m.result.message_id);
         }
-        return sendMessage(target, message.chat.id, message.message_id, reply_msg.reply_to);
+        return sendFullMessage(target, message.chat.id, message.message_id, reply_msg.rt);
     } else if (target) {
-        return sendMessage(target, message.chat.id, message.message_id);
+        return sendFullMessage(target, message.chat.id, message.message_id);
     } else {
         return sendPlainText(message.chat.id, "Not sent! Please start a chat (Reply to whomever you want to talk to)", message.message_id);
     }
@@ -181,13 +193,13 @@ async function onMessage (message) {
 
 // Copy a message and send it.
 // https://core.telegram.org/bots/api#copymessage
-async function sendMessage (chatId, fromChatId, msgId, replyMsgId = null) {
+async function sendFullMessage (chatId, fromChatId, msgId, replyMsgId = null) {
     const params = {
         chat_id: chatId,
         from_chat_id: fromChatId,
         message_id: msgId,
     }
-    addInlineKeyboard(params, fromChatId, msgId);
+    await addInlineKeyboard(params, fromChatId, msgId);
     addReplyParams(params, chatId, replyMsgId);
     return (await fetch(apiUrl('copyMessage', params))).json()
 }
@@ -227,18 +239,31 @@ function addReplyParams (params, chatId, replyMsgId) {
 
 // Add (or edit) the inline keyboard to a message.
 // https://core.telegram.org/bots/api#inlinekeyboardmarkup
-function addInlineKeyboard (params, fromChatId, msgId, reacted = false) {
-    var text = 'from: ' + hash(fromChatId);
+async function addInlineKeyboard (params, fromChatId, msgId, use_name = null, reacted = false) {
+    if (use_name == null) {
+        var use_name = JSON.parse(await CHATS.get(hash(fromChatId))) || [];
+        use_name = use_name[1];
+    }
+    var text = "from: " + await getUserName(fromChatId, use_name);
     params.reply_markup = JSON.stringify({
         inline_keyboard: [[{
             text: text,
             callback_data: JSON.stringify({
-                receiver: fromChatId,
-                reply_to: msgId,
-                reacted: reacted,
+                r: fromChatId,    // receiver
+                rt: msgId,    // reply_to
+                f: reacted*2 | use_name,    // flags (by bit)
             }),
         }]]
     })
+}
+
+// Get the custom name or hashed id of a user.
+async function getUserName (user_id, use_name = false) {
+    var user_name = hash(user_id);
+    if (use_name) {
+        user_name = await CUSTOM_NAMES.get(user_name) || user_name;
+    }
+    return user_name;
 }
 
 // Generate hash of the user ids.
@@ -262,10 +287,10 @@ function hash (message) {
 async function onCallbackQuery (callbackQuery) {
     var msg = JSON.parse(callbackQuery.data);
     const params = {
-        chat_id: msg.receiver,
-        message_id: msg.reply_to,
+        chat_id: msg.r,
+        message_id: msg.rt,
     }
-    if (!msg.reacted) {
+    if (!(msg.f&2)) {
         params.reaction = JSON.stringify([{
             type: 'emoji',
             emoji: '👍',
@@ -277,7 +302,7 @@ async function onCallbackQuery (callbackQuery) {
     await (await fetch(apiUrl('setMessageReaction', params))).json()
 
     delete params.reaction;
-    addInlineKeyboard(params, msg.receiver, msg.reply_to, !msg.reacted);
+    await addInlineKeyboard(params, msg.r, msg.rt, msg.f&1, !(msg.f&2));
     await (await fetch(apiUrl('editMessageReplyMarkup', params))).json()
     return answerCallbackQuery(callbackQuery.id)
 }
@@ -301,7 +326,6 @@ async function answerCallbackQuery (callbackQueryId, text = null) {
 // Set webhook to this worker's url
 // https://core.telegram.org/bots/api#setwebhook
 async function registerWebhook (event, requestUrl, suffix, secret) {
-    // https://core.telegram.org/bots/api#setwebhook
     const webhookUrl = `${requestUrl.protocol}//${requestUrl.hostname}${suffix}`
     const r = await (await fetch(apiUrl('setWebhook', { url: webhookUrl, secret_token: secret }))).json()
     return new Response('ok' in r && r.ok ? 'Ok' : JSON.stringify(r, null, 2))
