@@ -2,7 +2,7 @@
 const TOKEN = ENV_BOT_TOKEN;  // Get it from @BotFather https://core.telegram.org/bots#6-botfather
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET;  // A-Z, a-z, 0-9, _ and -
-const START_LINK = "https://t.me/mybasicanonbot?start=";
+const START_LINK = "https://t.me/" + BOT_USERNAME + "?start=";
 const HELPTXT_EN = "Hi! With this bot you can chat with someone anonymously.\n" +
     "Reply to someone's message and then you can continue to chat with them.\n" +
     "You can send all kinds of messages. " +
@@ -13,6 +13,8 @@ const HELPTXT_EN = "Hi! With this bot you can chat with someone anonymously.\n" 
     "/end - End the ongoing chat\n" +
     "/mylink - Get your link\n" +
     "/customname - Set your name and link (like a username)\n" +
+    "/block - Reply to a message with this, to block the sender. \n" +
+    "/unblock - Reply to a message with this, to unblock the sender. \n" +
     "\nIf there were any issues you can contact me here: " + START_LINK + "admin"
 const HELPTXT_FA = "سلام! با این بات میتونی ناشناس چت کنی.\n" +
     "وقتی به پیام کسی ریپلای میزنی، بعدش میتونی باهاش چت رو ادامه بدی.\n" +
@@ -24,6 +26,8 @@ const HELPTXT_FA = "سلام! با این بات میتونی ناشناس چت 
     "/end - بستن چت جاری\n" +
     "/mylink - لینک ناشناس خودت\n" +
     "/customname - انتخاب اسم و لینک سفارشی (مثل یوزرنیم)\n" +
+    "/block - ریپلای با این بلاک می‌کنه \n" +
+    "/unblock - ریپلای با این آنبلاک می‌کنه \n" +
     "\n مشکلی هم اگه بود، می‌تونی اینجا پیام بدی: " + START_LINK + "admin"
 const HELPTXT = HELPTXT_EN + '\n\n\n' + HELPTXT_FA;
 var insistent_user = 0;
@@ -90,6 +94,12 @@ async function onMessage (message) {
     var current_chat = JSON.parse(await CHATS.get(user_id)) || [];
     var target = current_chat[0];
     var use_name = current_chat[1];
+    var reply_msg;
+    try {
+        reply_msg = JSON.parse(message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data);
+    } catch(err) {
+        reply_msg = {r: null, rt: null};
+    }
 
     if (message.text) {
         if (message.text.startsWith('/start')) {
@@ -97,7 +107,7 @@ async function onMessage (message) {
                 return sendPlainText(message.chat.id, HELPTXT);
             }
             var cname = message.text.split(' ')[1].toLowerCase();
-            target = await LINKS.get(cname);
+            target = Number(await LINKS.get(cname));
             if (!target) {
                 return sendPlainText(message.chat.id, "Sorry, that user wasn't found. (/help)", message.message_id);
             }
@@ -109,10 +119,17 @@ async function onMessage (message) {
                 }
                 return sendPlainText(message.chat.id, "You tryna text yourself or just wanna see if it works? :)", message.message_id);
             }
+            if (await isBlocked(hash(target), message.chat.id, 1)) {
+                return sendPlainText(message.chat.id, "Sorry, you can't message that user.", message.message_id);
+            }
             if (target == current_chat[0] && !use_name) {
                 return sendPlainText(message.chat.id, "You don't need to click on the link again. You are alreay in a chat with '" + cname + "'.", message.message_id);
             }
-            await CHATS.put(user_id, JSON.stringify([target, false]));
+            if (cname == "admin") {
+                // distinguish chats with admin from personal
+                await sendPlainText(await LINKS.get("admin"), user_id + ' is contacting the admin!');
+            }
+            await CHATS.put(user_id, JSON.stringify([target, 0]));
             var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + cname + "'.\nMesseges you send here will be sent to them.\nUse /end if you want to close the chat.");
             return changePinnedMessage(message.chat.id, m.result.message_id);
 
@@ -155,13 +172,45 @@ async function onMessage (message) {
 
         } else if (message.text == '/end') {
             if (target) {
-                await CHATS.delete(user_id);
-                await (await fetch(apiUrl('unpinAllChatMessages', {
-                    chat_id: message.chat.id
-                }))).json()
+                await closeChat(message.chat.id);
                 return sendPlainText(message.chat.id, "Chat closed!", message.message_id);
             } else {
                 return sendPlainText(message.chat.id, "You are not in any chat.", message.message_id);
+            }
+
+        } else if (message.text == '/block') {
+            if (!reply_msg.r) {
+                return sendPlainText(message.chat.id, "Please reply to a message of the user you want to block and send this command.", message.message_id);
+            }
+            var block_list = JSON.parse(await BLOCKS.get(user_id)) || [];
+            var blockee = JSON.stringify([Number(reply_msg.r), reply_msg.f&1^1]);
+            if (block_list.includes(blockee)) {
+                return sendPlainText(message.chat.id, "They are already blocked!", message.message_id);
+            } else {
+                block_list.push(blockee);
+                await BLOCKS.put(user_id, JSON.stringify(block_list));
+                if (await CHATS.get(user_id) == blockee) {
+                    await closeChat(message.chat.id);
+                }
+                if (await CHATS.get(hash(reply_msg.r)) == JSON.stringify([message.chat.id, reply_msg.f&1])) {
+                    await closeChat(reply_msg.r);
+                    await sendPlainText(reply_msg.r, "Sorry, the chat was ended bacause '" + await getUserName(message.chat.id, reply_msg.f&1^1) + "' blocked you.");
+                }
+                return sendPlainText(message.chat.id, "Blocked!", message.message_id);
+            }
+
+        } else if (message.text == '/unblock') {
+            if (!reply_msg.r) {
+                return sendPlainText(message.chat.id, "Please reply to a message of the user you want to unblock and send this command.", message.message_id);
+            }
+            var block_list = JSON.parse(await BLOCKS.get(user_id)) || [];
+            var blockee = JSON.stringify([Number(reply_msg.r), reply_msg.f&1^1]);
+            if (!block_list.includes(blockee)) {
+                return sendPlainText(message.chat.id, "They are not blocked!", message.message_id);
+            } else {
+                block_list.splice(block_list.indexOf(blockee), 1);
+                await BLOCKS.put(user_id, JSON.stringify(block_list));
+                return sendPlainText(message.chat.id, "Unblocked!", message.message_id);
             }
 
         } else if (message.text == '/help') {
@@ -169,26 +218,21 @@ async function onMessage (message) {
         }
     }
 
-    var reply_msg;
-    try {
-        reply_msg = JSON.parse(message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data);
-    } catch(err) {
-        reply_msg = {r: null, rt: null};
-    }
+    if (reply_msg.r && (target != reply_msg.r || use_name == (reply_msg.f&1))) {    // reply to a new user or reply to same user with a different id
+        target = Number(reply_msg.r);
+        use_name = reply_msg.f&1^1;
 
-    if (reply_msg.r) {
-        if (target != reply_msg.r || use_name == (reply_msg.f&1)) {    // reply to a new user or reply to same user with a different id
-            target = reply_msg.r;
-            await CHATS.put(user_id, JSON.stringify([target, !(reply_msg.f&1)]));
-            var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + await getUserName(target, reply_msg.f&1) + "'.", message.message_id);
-            await changePinnedMessage(message.chat.id, m.result.message_id);
+        if (await isBlocked(hash(target), message.chat.id, use_name^1)) {
+            return sendPlainText(message.chat.id, "Sorry, you can't message that user.", message.message_id);
         }
-        return sendFullMessage(target, message.chat.id, message.message_id, reply_msg.rt);
-    } else if (target) {
-        return sendFullMessage(target, message.chat.id, message.message_id);
-    } else {
-        return sendPlainText(message.chat.id, "Not sent! Please start a chat (Reply to whomever you want to talk to)", message.message_id);
+        await CHATS.put(user_id, JSON.stringify([target, use_name]));
+        var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + await getUserName(target, reply_msg.f&1) + "'.", message.message_id);
+        await changePinnedMessage(message.chat.id, m.result.message_id);
     }
+    if (target) {
+        return sendFullMessage(target, message.chat.id, message.message_id, reply_msg.rt);
+    }
+    return sendPlainText(message.chat.id, "Not sent! Please start a chat (Reply to whomever you want to talk to)", message.message_id);
 }
 
 // Copy a message and send it.
@@ -258,12 +302,24 @@ async function addInlineKeyboard (params, fromChatId, msgId, use_name = null, re
 }
 
 // Get the custom name or hashed id of a user.
-async function getUserName (user_id, use_name = false) {
-    var user_name = hash(user_id);
+async function getUserName (user, use_name = false) {
+    var user_name = hash(user);
     if (use_name) {
         user_name = await CUSTOM_NAMES.get(user_name) || user_name;
     }
     return user_name;
+}
+
+async function closeChat (chatId) {
+    await CHATS.delete(hash(chatId));
+    return (await fetch(apiUrl('unpinAllChatMessages', {
+        chat_id: chatId,
+    }))).json()
+}
+
+async function isBlocked (blocker, blockee, use_name) {
+    var block_list = JSON.parse(await BLOCKS.get(blocker)) || [];
+    return block_list.includes(JSON.stringify([blockee, use_name&1]));
 }
 
 // Generate hash of the user ids.
@@ -286,24 +342,26 @@ function hash (message) {
 // https://core.telegram.org/bots/api#message
 async function onCallbackQuery (callbackQuery) {
     var msg = JSON.parse(callbackQuery.data);
-    const params = {
-        chat_id: msg.r,
-        message_id: msg.rt,
-    }
-    if (!(msg.f&2)) {
-        params.reaction = JSON.stringify([{
-            type: 'emoji',
-            emoji: '👍',
-        }])
-    }
-    await (await fetch(apiUrl('setMessageReaction', params))).json()
-    params.chat_id = callbackQuery.message.chat.id;
-    params.message_id = callbackQuery.message.message_id;
-    await (await fetch(apiUrl('setMessageReaction', params))).json()
+    if (!await isBlocked(hash(msg.r), callbackQuery.message.chat.id, msg.f&1)) {
+        const params = {
+            chat_id: msg.r,
+            message_id: msg.rt,
+        }
+        if (!(msg.f&2)) {
+            params.reaction = JSON.stringify([{
+                type: 'emoji',
+                emoji: '👍',
+            }])
+        }
+        await (await fetch(apiUrl('setMessageReaction', params))).json()
+        params.chat_id = callbackQuery.message.chat.id;
+        params.message_id = callbackQuery.message.message_id;
+        await (await fetch(apiUrl('setMessageReaction', params))).json()
 
-    delete params.reaction;
-    await addInlineKeyboard(params, msg.r, msg.rt, msg.f&1, !(msg.f&2));
-    await (await fetch(apiUrl('editMessageReplyMarkup', params))).json()
+        delete params.reaction;
+        await addInlineKeyboard(params, msg.r, msg.rt, msg.f&1, !(msg.f&2));
+        await (await fetch(apiUrl('editMessageReplyMarkup', params))).json()
+    }
     return answerCallbackQuery(callbackQuery.id)
 }
 
