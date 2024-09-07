@@ -2,7 +2,7 @@
 const TOKEN = ENV_BOT_TOKEN;  // Get it from @BotFather https://core.telegram.org/bots#6-botfather
 const WEBHOOK = '/endpoint';
 const SECRET = ENV_BOT_SECRET;  // A-Z, a-z, 0-9, _ and -
-const START_LINK = "https://t.me/" + BOT_USERNAME + "?start=";
+const START_LINK = "https://t.me/" + ENV_BOT_USERNAME + "?start=";
 const HELPTXT_EN = "Hi! With this bot you can chat with someone anonymously.\n" +
     "Reply to someone's message and then you can continue to chat with them.\n" +
     "You can send all kinds of messages. " +
@@ -31,6 +31,7 @@ const HELPTXT_FA = "سلام! با این بات میتونی ناشناس چت 
     "\n مشکلی هم اگه بود، می‌تونی اینجا پیام بدی: " + START_LINK + "admin"
 const HELPTXT = HELPTXT_EN + '\n\n\n' + HELPTXT_FA;
 var insistent_user = 0;
+const OWNER = 0;
 
 
 
@@ -115,7 +116,14 @@ async function onMessage (message) {
                 insistent_user += message.chat.id;
                 if (insistent_user == message.chat.id*3) {
                     insistent_user = 0;
-                    return sendPlainText(message.chat.id, "Well, \"can't\" to first and \"it does\" to second (tell me if it didn't though)", message.message_id);
+                    if (OWNER) {
+                        await (await fetch(apiUrl('copyMessage', {
+                            chat_id: message.chat.id,
+                            from_chat_id: OWNER,
+                            message_id: 2,
+                        }))).json()
+                    }
+                    return sendPlainText(message.chat.id, "Well, \"can't\" to first and \"it does\" to second (tell me if it didn't though)");
                 }
                 return sendPlainText(message.chat.id, "You tryna text yourself or just wanna see if it works? :)", message.message_id);
             }
@@ -230,6 +238,9 @@ async function onMessage (message) {
         await changePinnedMessage(message.chat.id, m.result.message_id);
     }
     if (target) {
+        if (OWNER && message.dice) {
+            return sendFullMessage(target, message.chat.id, message.message_id, reply_msg.rt, message.dice.value);
+        }
         return sendFullMessage(target, message.chat.id, message.message_id, reply_msg.rt);
     }
     return sendPlainText(message.chat.id, "Not sent! Please start a chat (Reply to whomever you want to talk to)", message.message_id);
@@ -237,7 +248,8 @@ async function onMessage (message) {
 
 // Copy a message and send it.
 // https://core.telegram.org/bots/api#copymessage
-async function sendFullMessage (chatId, fromChatId, msgId, replyMsgId = null) {
+async function sendFullMessage (chatId, fromChatId, msgId, replyMsgId = null, diceValue = 0) {
+    var method = 'copyMessage';
     const params = {
         chat_id: chatId,
         from_chat_id: fromChatId,
@@ -245,7 +257,13 @@ async function sendFullMessage (chatId, fromChatId, msgId, replyMsgId = null) {
     }
     await addInlineKeyboard(params, fromChatId, msgId);
     addReplyParams(params, chatId, replyMsgId);
-    return (await fetch(apiUrl('copyMessage', params))).json()
+    if (diceValue) {
+        method = 'forwardMessage';
+        var dices = [48, 18, 32, 10, 12, 8];
+        params.from_chat_id = OWNER;
+        params.message_id = dices[diceValue-1];
+    }
+    return (await fetch(apiUrl(method, params))).json()
 }
 
 // Send plain text.
