@@ -31,7 +31,12 @@ const HELPTXT_FA = "سلام! با این بات میتونی ناشناس چت 
     "\n مشکلی هم اگه بود، می‌تونی اینجا پیام بدی: " + START_LINK + "admin"
 const HELPTXT = HELPTXT_EN + '\n\n\n' + HELPTXT_FA;
 var insistent_user = 0;
-const OWNER = 0;
+if (typeof OWNER == 'undefined') {
+    var OWNER = 0;
+}
+if (typeof HASH_SALT == 'undefined') {
+    var HASH_SALT = 'f_59?Col>b]YfWBYATd^';
+}
 
 
 
@@ -207,9 +212,13 @@ async function onMessage (message) {
                 return sendPlainText(message.chat.id, "Blocked!", message.message_id);
             }
 
-        } else if (message.text == '/unblock') {
+        } else if (message.text.startsWith('/unblock')) {
+            if (message.text == '/unblock all') {
+                await BLOCKS.delete(user_id);
+                return sendPlainText(message.chat.id, "You block list was deleted!", message.message_id);
+            }
             if (!reply_msg.r) {
-                return sendPlainText(message.chat.id, "Please reply to a message of the user you want to unblock and send this command.", message.message_id);
+                return sendPlainText(message.chat.id, "Please reply to a message of the user you want to unblock and send this command.\n\n Or if you want to unblock everyone, send this:\n/unblock all", message.message_id);
             }
             var block_list = JSON.parse(await BLOCKS.get(user_id)) || [];
             var blockee = JSON.stringify([Number(reply_msg.r), reply_msg.f&1^1]);
@@ -342,7 +351,7 @@ async function isBlocked (blocker, blockee, use_name) {
 
 // Generate hash of the user ids.
 function hash (message) {
-    message = 'f_59?Col>b]YfWBYATd^' + message;
+    message = HASH_SALT + message;
     var hash = 0,
       i, chr;
     for (i = 0; i < message.length; i++) {
