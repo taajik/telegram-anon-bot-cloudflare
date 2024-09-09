@@ -136,14 +136,14 @@ async function onMessage (message) {
                 return sendPlainText(message.chat.id, "Sorry, you can't message that user.", message.message_id);
             }
             if (target == current_chat[0] && !use_name) {
-                return sendPlainText(message.chat.id, "You don't need to click on the link again. You are alreay in a chat with '" + cname + "'.", message.message_id);
+                return sendPlainText(message.chat.id, "You don't need to click on the link again. You are already in a chat with '" + cname + "'.", message.message_id);
             }
             if (cname == "admin") {
                 // distinguish chats with admin from personal
                 await sendPlainText(await LINKS.get("admin"), user_id + ' is contacting the admin!');
             }
             await CHATS.put(user_id, JSON.stringify([target, 0]));
-            var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + cname + "'.\nMesseges you send here will be sent to them.\nUse /end if you want to close the chat.");
+            var m = await sendPlainText(message.chat.id, "You are now in a chat with '" + cname + "'.\nMessages you send here will be sent to them.\nUse /end if you want to close the chat.");
             return changePinnedMessage(message.chat.id, m.result.message_id);
 
         } else if (message.text == '/mylink') {
@@ -155,7 +155,7 @@ async function onMessage (message) {
                 }
             }
             await sendPlainText(message.chat.id, "Here's your link:\nAnyone who clicks it, will see you as '" + cname + "'.", message.message_id);
-            return sendPlainText(message.chat.id,  START_LINK + cname);
+            return sendPlainText(message.chat.id,  START_LINK + cname, null, false);
 
         } else if (message.text.startsWith('/customname')) {
             if (message.text.split(' ').length == 1) {
@@ -166,7 +166,7 @@ async function onMessage (message) {
                 await LINKS.put(user_id, message.chat.id);    // link the hashed id
                 await LINKS.delete(await CUSTOM_NAMES.get(user_id));    // delete the custom link to the user's id
                 await CUSTOM_NAMES.delete(user_id);    // delete the custom name
-                return sendPlainText(message.chat.id, "Your name and link were reseted. Your link is now this:\n" + START_LINK + user_id, message.message_id);
+                return sendPlainText(message.chat.id, "Your name and link were reset. Your link is now this:\n" + START_LINK + user_id, message.message_id, false);
             }
             if (cname == 'delete') {
                 await LINKS.delete(user_id);    // delete the hashed id link
@@ -181,7 +181,7 @@ async function onMessage (message) {
             await LINKS.delete(user_id);    // delete the hashed id link
             await LINKS.delete(await CUSTOM_NAMES.get(user_id));    // delete the old custom link
             await CUSTOM_NAMES.put(user_id, cname);    // save the custom name
-            return sendPlainText(message.chat.id, "Done! Your name is now '" + cname + "' and your new link is this:\n" + START_LINK + cname, message.message_id);
+            return sendPlainText(message.chat.id, "Done! Your name is now '" + cname + "' and your new link is this:\n" + START_LINK + cname, message.message_id, false);
 
         } else if (message.text == '/end') {
             if (target) {
@@ -207,7 +207,7 @@ async function onMessage (message) {
                 }
                 if (await CHATS.get(hash(reply_msg.r)) == JSON.stringify([message.chat.id, reply_msg.f&1])) {
                     await closeChat(reply_msg.r);
-                    await sendPlainText(reply_msg.r, "Sorry, the chat was ended bacause '" + await getUserName(message.chat.id, reply_msg.f&1^1) + "' blocked you.");
+                    await sendPlainText(reply_msg.r, "Sorry, the chat was ended because '" + await getUserName(message.chat.id, reply_msg.f&1^1) + "' blocked you.");
                 }
                 return sendPlainText(message.chat.id, "Blocked!", message.message_id);
             }
@@ -215,7 +215,7 @@ async function onMessage (message) {
         } else if (message.text.startsWith('/unblock')) {
             if (message.text == '/unblock all') {
                 await BLOCKS.delete(user_id);
-                return sendPlainText(message.chat.id, "You block list was deleted!", message.message_id);
+                return sendPlainText(message.chat.id, "Your block list was deleted!", message.message_id);
             }
             if (!reply_msg.r) {
                 return sendPlainText(message.chat.id, "Please reply to a message of the user you want to unblock and send this command.\n\n Or if you want to unblock everyone, send this:\n/unblock all", message.message_id);
@@ -231,7 +231,7 @@ async function onMessage (message) {
             }
 
         } else if (message.text == '/help') {
-            return sendPlainText(message.chat.id, HELPTXT, message.message_id);
+            return sendPlainText(message.chat.id, HELPTXT, message.message_id, false);
         }
     }
 
@@ -277,10 +277,15 @@ async function sendFullMessage (chatId, fromChatId, msgId, replyMsgId = null, di
 
 // Send plain text.
 // https://core.telegram.org/bots/api#sendmessage
-async function sendPlainText (chatId, text, replyMsgId = null) {
+async function sendPlainText (chatId, text, replyMsgId = null, disablePreview = true) {
     const params = {
         chat_id: chatId,
         text,
+    }
+    if (disablePreview) {
+        params.link_preview_options = JSON.stringify({
+            is_disabled: disablePreview,
+        })
     }
     addReplyParams(params, chatId, replyMsgId);
     return (await fetch(apiUrl('sendMessage', params))).json()
